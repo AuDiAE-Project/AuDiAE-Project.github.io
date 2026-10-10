@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="AuDiAE audio examples: reconstruction and text-to-audio generation.">
+  <meta name="description" content="AuDiAE: method overview and audio examples for reconstruction and text-to-audio generation.">
   <title>AuDiAE — Audio Examples</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=5b82dd71c33f">
-  <link rel="stylesheet" href="styles.css?v=ed494937b139">
-  <script defer src="data.js?v=28c88abd6894"></script>
-  <script defer src="app.js?v=f246b5fcd880"></script>
+  <link rel="stylesheet" href="styles.css?v=63d12d07ec5a">
+  <script defer src="data.js?v=a0cf3c5f0a3c"></script>
+  <script defer src="app.js?v=8a289473a866"></script>
 </head>
 <body>
 <a class="skip-link" href="#reconstruction">Skip to audio examples</a>
@@ -16,28 +16,114 @@
 <aside class="side-rail">
   <a class="rail-brand" href="#top" aria-label="AuDiAE page introduction">AuDiAE<span aria-hidden="true">.</span></a>
   <nav class="site-nav" aria-label="Sections">
-    <a href="#reconstruction"><span>01</span> Reconstruction</a>
-    <a href="#generation"><span>02</span> Generation</a>
-    <a href="#results"><span>03</span> Results</a>
+    <a href="#method"><span>01</span> Method</a>
+    <a href="#reconstruction"><span>02</span> Reconstruction</a>
+    <a href="#generation"><span>03</span> Generation</a>
+    <a href="#results"><span>04</span> Results</a>
   </nav>
 </aside>
 <main class="page">
   <header class="page-header" id="top">
     <div class="hero-grid">
       <h1><span class="paper-name">AuDiAE:</span><span class="paper-title">Learning Audio Latents by Coupling Diffusion Priors and Decoders</span></h1>
-      <p class="overview">AuDiAE couples learned diffusion rate models with a generative waveform decoder to learn compact audio latents. Marginal and text-conditional rate objectives balance retained audio detail with information predictable from text.</p>
+      <p class="overview">AuDiAE couples a learned diffusion rate model with a flow-matching waveform decoder through a shared encoder representation. The marginal rate bounds total latent information, while its text-conditional counterpart makes caption-predictable information less costly to encode.</p>
     </div>
-    <details class="method-details">
-      <summary>Method overview</summary>
-      <figure>
-        <img src="assets/framework.png" alt="AuDiAE encoder, marginal and conditional diffusion rate model, and latent-conditioned waveform diffusion decoder.">
-        <figcaption>An encoder supplies a common representation to the diffusion rate model and waveform decoder. Caption features condition the rate model; waveform decoding is conditioned on audio latents.</figcaption>
+    <div class="at-a-glance">
+      <figure class="glance-figure">
+        <img src="assets/method/teaser_comparison.png?v=2169f78af553" width="1600" height="518" alt="AudioCaps generation FAD against sound reconstruction SI-SDR for every autoencoder in Table 2; AuDiAE lies in the upper-left corner.">
+        <figcaption>Every autoencoder of Table 2: AudioCaps generation FAD against sound-domain reconstruction SI-SDR; upper-left is better. Parentheses give temporal compression.</figcaption>
       </figure>
-    </details>
+      <dl class="highlights">
+        <div><dt>10.66 dB</dt><dd>AuDiAE sound reconstruction SI-SDR at 2048×; strongest baseline SAME-L 8.49 dB, Stable Audio Open at the same compression 1.24 dB</dd></div>
+        <div><dt>0.075</dt><dd>AuDiAE AudioCaps generation FAD; strongest external autoencoder 0.116</dd></div>
+        <div><dt>0.104 at 4096×</dt><dd>AuDiAE-H generation FAD, ahead of SAME-L (0.205) and CoDiCodec (0.116) at similar compression</dd></div>
+      </dl>
+    </div>
   </header>
 
+  <section id="method" aria-labelledby="method-title">
+    <h2 id="method-title"><span class="section-number">01</span> Method</h2>
+    <p class="method-lead">An audio latent serves two consumers: the decoder that reconstructs the waveform, and the downstream generator that learns to produce latents from text. AuDiAE starts from three limitations of the usual design, a Gaussian KL penalty with a deterministic decoder.</p>
+    <ol class="problem-cards">
+      <li class="problem-card">
+        <span class="problem-number">①</span>
+        <h3>Standard KL also charges for mismatch</h3>
+        <p>The KL to 𝒩(0, I) adds two costs: the information the latent carries about the audio, and the mismatch between the latent distribution and 𝒩(0, I). Only the first serves reconstruction, yet under a tight budget the second consumes rate that could carry detail.</p>
+        <div class="problem-math"><img src="assets/method/eq_problem_rate.svg?v=ca50ae4ee515" style="width:19.6em" alt="R_0 = I(X;Z) [information] + KL(q_phi || N(0, I)) [mismatch to N(0, I)]"></div>
+        <a class="problem-link" href="#component-a">Addressed by A · learned diffusion rate</a>
+      </li>
+      <li class="problem-card">
+        <span class="problem-number">②</span>
+        <h3>Latent detail the caption cannot predict</h3>
+        <p>A text-to-audio generator learns latents given a caption, so its target is the latent information the caption leaves unexplained. Latents with the same total information can pose different learning problems.</p>
+        <div class="problem-math"><img src="assets/method/eq_problem_text.svg?v=02d6348f9b32" style="width:19.2em" alt="I(X;Z|C) = I(X;Z) - I(C;Z)"></div>
+        <a class="problem-link" href="#component-b">Addressed by B · text-conditional rate</a>
+      </li>
+      <li class="problem-card">
+        <span class="problem-number">③</span>
+        <h3>One latent, many waveforms</h3>
+        <p>At 2048–4096× compression a rate-limited latent is compatible with many waveforms. A deterministic decoder must return one of them, collapsing this one-to-many inverse into a point estimate.</p>
+        <div class="problem-math"><img src="assets/method/eq_problem_decoder.svg?v=89d7271144f0" style="width:17.1em" alt="hat x = g(z) vs. x ~ p_theta(x | z_b)"></div>
+        <a class="problem-link" href="#component-c">Addressed by C · waveform diffusion decoder</a>
+      </li>
+    </ol>
+    <div class="price-block">
+      <h3>Problem ①: what the standard KL costs</h3>
+      <div class="price-grid">
+        <figure class="method-figure">
+          <img src="assets/method/teaser_motivation.png?v=1fc6f90f1f4e" width="1600" height="464" alt="Schematic densities: a fixed Gaussian reference versus a learned diffusion reference that follows a multimodal aggregate latent density.">
+          <figcaption><span class="fig-tag">Schematic</span>(a) Standard KL measures the latent distribution against a fixed 𝒩(0, I), so its mismatch is charged on top of the information. (b) A learned diffusion reference follows the latent distribution while still bounding the information.</figcaption>
+        </figure>
+        <figure class="method-figure">
+          <img src="assets/method/kl_control.png?v=be4ae0067768" width="1655" height="702" alt="Standard KL to N(0, I) versus learned diffusion rate: SI-SDR 13.76 to 14.83 dB, MEL 0.0308 to 0.0284, rFAD 0.0893 to 0.0741, generation FAD 0.142 to 0.093.">
+          <figcaption><span class="fig-tag">Measured</span>Table 3(a), AudioCaps test. Both systems share the encoder, endpoint channel, rate coefficient, training budget, decoder and downstream generator; only the rate reference changes. The control uses the exact KL to 𝒩(0, I) on this fixed-precision channel and is not a learned-variance VAE.</figcaption>
+        </figure>
+      </div>
+    </div>
+    <figure class="method-figure framework-figure">
+      <img src="assets/method/framework.png?v=9698f62b67a6" width="1815" height="646" alt="AuDiAE encoder, marginal and conditional diffusion rate model, and latent-conditioned waveform diffusion decoder.">
+      <figcaption>The encoder output <i>U</i> feeds two paths.<br><span class="badge">A</span>The diffusion rate model with the learned null ∅ gives the marginal rate.<br><span class="badge">B</span>The same model given the caption feature <i>C</i> gives the conditional rate; both are mixed in the rate regularizer.<br><span class="badge">C</span>The waveform diffusion decoder is conditioned on the noisy endpoint <i>Z</i><sub>b</sub>; text does not enter it.</figcaption>
+    </figure>
+    <ol class="method-rows">
+      <li class="method-row" id="component-a">
+        <div class="method-copy">
+          <span class="method-index">A · addresses ①</span>
+          <h3>Learned marginal diffusion rate</h3>
+          <p>Replace the fixed Gaussian with a learned reference. A fixed-precision channel turns the encoder output <i>U</i> into the decoder condition <i>Z</i><sub>b</sub>, and a diffusion prior with the null condition models this endpoint. Its variational bound still upper-bounds the transmitted information, but the reference now follows the aggregate latent distribution, so the mismatch <i>M</i><sub>u</sub> can shrink instead of competing with detail.</p>
+          <p class="evidence">Controlled evidence · <a href="#results" data-result-link="controlled">Table 3(a)</a>: replacing the fixed Gaussian rate with the learned rate raises SI-SDR by 1.07 dB, lowers rFAD by 17% and lowers generation FAD from 0.142 to 0.093.</p>
+        </div>
+        <div class="method-math"><img src="assets/method/eq_channel.svg?v=3b7fd1d8ad03" style="width:19.9em" alt="Z_b = alpha_b U + sigma_b eta_b, eta_b ~ N(0, I)"><img src="assets/method/eq_bound.svg?v=8f6789eb6bff" style="width:33.1em" alt="I(X;Z_b) <= R_u <= bar R_u = B_a + J_u, R_u = I(X;Z_b) + M_u"></div>
+      </li>
+      <li class="method-row" id="component-b">
+        <div class="method-copy">
+          <span class="method-index">B · addresses ②</span>
+          <h3>Text-conditional mixed rate</h3>
+          <p>Give the same prior the frozen caption feature <i>C</i> and mix the conditional rate with the marginal one. The mixture subtracts ρ<i>I</i>(<i>Z</i><sub>b</sub>;<i>C</i>), so information the caption can predict becomes cheaper to encode, while the marginal part still bounds total information. No latent coordinate is aligned to a text embedding, and the encoder sees only audio.</p>
+          <p class="evidence">Controlled evidence · <a href="#results" data-result-link="controlled">Table 3(b)</a>: paired captions lower generation FAD to 0.075, whereas shuffled captions give 0.095, no better than the unconditional rate (0.093).</p>
+        </div>
+        <div class="method-math"><img src="assets/method/eq_mixed.svg?v=416c102c1495" style="width:30.3em" alt="bar R_rho = (1-rho) bar R_u + rho bar R_c = I(X;Z_b) - rho I(Z_b;C) + E_rho"><img src="assets/method/eq_control.svg?v=3acfcd80718e" style="width:10.2em" alt="I(X;Z_b) <= bar R_rho / (1-rho)"></div>
+      </li>
+      <li class="method-row" id="component-c">
+        <div class="method-copy">
+          <span class="method-index">C · addresses ③</span>
+          <h3>Waveform diffusion decoder</h3>
+          <p>Treat decoding as conditional waveform generation. A clean-target flow-matching decoder samples a waveform consistent with <i>Z</i><sub>b</sub> rather than returning one point estimate, and its denoising risk values encoded detail by how much it reduces synthesis uncertainty. Generative decoding cannot recover source information absent from <i>Z</i><sub>b</sub>.</p>
+          <p class="evidence">Listen · <a href="#reconstruction">reconstruction examples</a> at 2048× (AuDiAE) and 4096× (AuDiAE-H).</p>
+        </div>
+        <div class="method-math"><img src="assets/method/eq_decoder.svg?v=023b8670f7b7" style="width:23.1em" alt="S_t = t S + (1-t) xi, hat S = F_theta(S_t, t, Z_b)"><img src="assets/method/eq_value.svg?v=1914b8a7e45e" style="width:18.2em" alt="V_w(Z_b) = D*_w(empty) - D*_w(Z_b) >= 0"></div>
+      </li>
+    </ol>
+    <div class="objective">
+      <div class="method-copy">
+        <h3>Joint training</h3>
+        <p>Encoder, rate model and decoder are optimized together; the multiresolution STFT term is a practical spectral prior outside the variational derivation. Stage 1 uses only the null condition (ρ = 0), and Stage 2 adds paired captions (ρ &gt; 0). For audio generation, a separate generator is trained on the frozen encoder output <i>U</i>.</p>
+      </div>
+      <div class="method-math"><img src="assets/method/eq_objective.svg?v=bedd4333406d" style="width:38.9em" alt="J_rho = L_FM + kappa_STFT L_MRSTFT + beta bar R_rho, bar R_rho = B_a + (1-rho) J_u + rho J_c"></div>
+    </div>
+  </section>
+
   <section id="reconstruction" aria-labelledby="reconstruction-title">
-    <h2 id="reconstruction-title"><span class="section-number">01</span> Audio reconstruction</h2>
+    <h2 id="reconstruction-title"><span class="section-number">02</span> Audio reconstruction</h2>
     <p class="section-description">Sound and music reconstructions.</p>
     <div class="domain-tabs" id="domain-tabs" aria-label="Audio domain">
       <button type="button" data-domain="sound" aria-pressed="true">Sound</button>
@@ -55,18 +141,19 @@
   </section>
 
   <section id="generation" aria-labelledby="generation-title">
-    <h2 id="generation-title"><span class="section-number">02</span> Text-to-audio generation</h2>
+    <h2 id="generation-title"><span class="section-number">03</span> Text-to-audio generation</h2>
     <h3>Sound — AudioCaps</h3>
-    <p class="protocol">DiT latent generator · 24 sampling steps · CFG 5 · 10 s</p>
+    <p class="protocol">AudioCaps test captions · 24 sampling steps · CFG 5 · 10 s</p>
     <div id="sound-generation"></div>
   </section>
 
   <section id="results" aria-labelledby="results-title">
-    <h2 id="results-title"><span class="section-number">03</span> Results</h2>
+    <h2 id="results-title"><span class="section-number">04</span> Results</h2>
     <p class="section-description">Results reported in the paper.</p>
     <div class="result-tabs" id="result-tabs" aria-label="Results table">
       <button type="button" data-result="reconstruction" aria-pressed="true">Reconstruction · Table 1</button>
       <button type="button" data-result="generation" aria-pressed="false">Generation · Table 2</button>
+      <button type="button" data-result="controlled" aria-pressed="false">Controlled analysis · Table 3</button>
     </div>
     <div id="result-table"></div>
   </section>

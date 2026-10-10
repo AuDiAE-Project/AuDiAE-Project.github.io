@@ -122,7 +122,7 @@
     const additional = example.models.filter(model => !primaryIds.includes(model.id));
     const baselines = example.models.filter(model => !['reference', 'ours_2048', 'ours_4096'].includes(model.id));
     const selectedBaseline = state.baselines[id] || example.spectra.defaultBaseline;
-    root.innerHTML = `<div class="recording-heading"><h3>${escape(example.title)}</h3><span class="duration">${example.duration.toFixed(1)} s</span></div>${example.description ? `<p class="recording-caption">${escape(example.description)}</p>` : ''}<div class="compare-controls"><span>Compare</span><button type="button" data-play-model="reference">Reference</button><button type="button" data-play-model="ours_2048">AuDiAE</button><button type="button" data-play-model="ours_4096">AuDiAE-H</button><select class="audio-baseline-select" aria-label="Playback baseline">${baselines.map(m => `<option value="${escape(m.id)}"${m.id === selectedBaseline ? ' selected' : ''}>${escape(m.label)}</option>`).join('')}</select><button type="button" data-play-baseline>Play baseline</button><button type="button" data-restart>Restart</button><label><input type="checkbox" data-loop${state.loop ? ' checked' : ''}> Loop</label></div><div class="track-grid">${primary.map(model => track(model, example.id)).join('')}</div>${additional.length ? `<details class="additional-models"><summary>Additional baselines (${additional.length})</summary><div class="track-grid">${additional.map(model => track(model, example.id)).join('')}</div></details>` : ''}`;
+    root.innerHTML = `<div class="recording-heading"><h3>${escape(example.title)}</h3><span class="duration">${example.duration.toFixed(1)} s</span></div>${example.description ? `<p class="recording-caption">${escape(example.description)}</p>` : ''}<div class="compare-controls"><span>Compare</span><button type="button" data-play-model="reference">Reference</button><button type="button" data-play-model="ours_2048">AuDiAE</button><button type="button" data-play-model="ours_4096">AuDiAE-H</button><select class="audio-baseline-select" aria-label="Playback baseline">${baselines.map(m => `<option value="${escape(m.id)}"${m.id === selectedBaseline ? ' selected' : ''}>${escape(m.label)}</option>`).join('')}</select><button type="button" data-play-baseline>Play baseline</button><button type="button" data-restart>Restart</button><label><input type="checkbox" data-loop${state.loop ? ' checked' : ''}> Loop</label></div>${example.highlight ? `<div class="detail-listen-controls highlight-controls"><span>Loop ${example.highlight[0].toFixed(1)}–${example.highlight[1].toFixed(1)} s</span>${primary.map(m => `<button type="button" data-highlight-model="${escape(m.id)}">${escape(m.label)}</button>`).join('')}<button type="button" data-highlight-full>Full clip</button></div>` : ''}<div class="track-grid">${primary.map(model => track(model, example.id)).join('')}</div>${additional.length ? `<details class="additional-models"><summary>Additional baselines (${additional.length})</summary><div class="track-grid">${additional.map(model => track(model, example.id)).join('')}</div></details>` : ''}`;
     $('#example-select').querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.example === id)));
     wirePlayers(root);
     renderReconstructionSpectra(example);
@@ -134,7 +134,20 @@
     root.querySelectorAll('[data-play-model]').forEach(button => button.addEventListener('click', () => play(button.dataset.playModel)));
     root.querySelector('[data-play-baseline]').addEventListener('click', () => play(root.querySelector('.audio-baseline-select').value));
     root.querySelector('.audio-baseline-select').addEventListener('change', event => updateComparisonBaseline(example, event.target.value));
+    root.querySelectorAll('[data-highlight-model]').forEach(button => button.addEventListener('click', () => {
+      const [start, end] = example.highlight;
+      const audio = root.querySelector(`audio[data-model="${button.dataset.highlightModel}"]`);
+      document.querySelectorAll('audio').forEach(other => { if (other !== audio) other.pause(); });
+      state.active = null;
+      state.segment = {group: example.id, start, end};
+      const seek = () => { if (audio.currentTime < start || audio.currentTime >= end) audio.currentTime = start; };
+      if (audio.readyState > 0) seek(); else audio.addEventListener('loadedmetadata', seek, {once: true});
+      audio.play().catch(() => notify('This recording could not be played.'));
+    }));
+    const fullClip = root.querySelector('[data-highlight-full]');
+    if (fullClip) fullClip.addEventListener('click', () => { state.segment = null; });
     root.querySelector('[data-restart]').addEventListener('click', () => {
+      state.segment = null;
       root.querySelectorAll('audio').forEach(a => { if (a.readyState > 0) a.currentTime = 0; });
       drawTracks();
     });
@@ -168,13 +181,13 @@
     const next = examples[(examples.findIndex(item => item.id === example.id) + 1) % examples.length];
     const pair = next.id === example.id ? [example] : [example, next];
     $('#reconstruction-spectra').innerHTML = `<h3>Spectrogram Comparison</h3>${pair.map(item => {
-      const key = state.baselines[item.id] || 'ear2';
+      const key = state.baselines[item.id] || item.spectra.defaultBaseline;
       const figures = item.spectra.baselines[key];
       const alt = `${item.title}: Reference, AuDiAE, AuDiAE-H and ${figures.label}`;
       const overview = item.spectra.overview;
       const allModels = `${item.title}: Reference, AuDiAE, AuDiAE-H, SAME-L, Stable Audio Open and CoDiCodec; spectrograms and signed level differences`;
       const mainFigure = overview ? spectrumFigure(overview.src, 'Spectrogram and level difference from Reference', allModels, 'overview') : spectrumFigure(figures.spectrum, 'Spectrogram', alt + '; spectrogram');
-      return `<article class="comparison-case" data-case="${escape(item.id)}"><div class="comparison-heading"><h4>${escape(item.title)} <span>${item.duration.toFixed(1)} s</span></h4><button type="button" data-listen-case="${escape(item.id)}">Listen</button></div>${mainFigure}<details class="additional-spectrum-comparisons"><summary>More comparisons</summary><div class="comparison-extra-controls"><label>Baseline <select aria-label="Spectrogram baseline for ${escape(item.title)}">${Object.entries(item.spectra.baselines).map(([id, v]) => `<option value="${escape(id)}"${id === key ? ' selected' : ''}>${escape(v.label)}</option>`).join('')}</select></label></div><div class="figure-pair">${spectrumFigure(figures.spectrum, 'Spectrogram', alt + '; spectrogram', 'spectrum')}${spectrumFigure(figures.difference, 'Level difference from Reference', alt + '; signed level difference to Reference', 'difference')}</div></details></article>`;
+      return `<article class="comparison-case" data-case="${escape(item.id)}"><div class="comparison-heading"><h4>${escape(item.title)} <span>${item.duration.toFixed(1)} s${item.highlight ? ` · dashed box ${item.highlight[0].toFixed(1)}–${item.highlight[1].toFixed(1)} s${item.highlightBand ? `, below ${item.highlightBand[1]} kHz` : ''}` : ''}</span></h4><button type="button" data-listen-case="${escape(item.id)}">Listen</button></div>${mainFigure}<details class="additional-spectrum-comparisons"><summary>More comparisons</summary><div class="comparison-extra-controls"><label>Baseline <select aria-label="Spectrogram baseline for ${escape(item.title)}">${Object.entries(item.spectra.baselines).map(([id, v]) => `<option value="${escape(id)}"${id === key ? ' selected' : ''}>${escape(v.label)}</option>`).join('')}</select></label></div><div class="figure-pair">${spectrumFigure(figures.spectrum, 'Spectrogram', alt + '; spectrogram', 'spectrum')}${spectrumFigure(figures.difference, 'Level difference from Reference', alt + '; signed level difference to Reference', 'difference')}</div></details></article>`;
     }).join('')}`;
     $('#reconstruction-spectra').querySelectorAll('.comparison-case').forEach(card => {
       const item = data.reconstruction.find(x => x.id === card.dataset.case);
@@ -211,17 +224,27 @@
       const region = example.visuals?.detailRegion;
       const comparisonModels = [example.reference, ...example.models];
       const controls = region ? `<div class="detail-listen-controls"><span>Loop ${region[0].toFixed(1)}–${region[1].toFixed(1)} s</span>${comparisonModels.map(m => `<button type="button" data-detail-model="${escape(m.id)}" data-detail-case="${escape(example.id)}">${escape(m.label)}</button>`).join('')}<button type="button" data-full-clip="${escape(example.id)}">Full clip</button></div>` : '';
-      const figure = example.visuals ? `<details class="spectrum-panel"><summary>Spectrograms and text alignment</summary><div class="spectrum-prompt"><span>Text prompt</span><p>${escape(example.prompt)}</p></div>${controls}<div class="generation-figure">${spectrumFigure(example.visuals.spectrum, 'Full-clip spectrograms · text–audio CLAP', 'Dataset reference, AuDiAE, AuDiAE-H and baselines; full spectrograms and measured text–audio CLAP for ' + example.prompt)}</div></details>` : '';
+      const figure = example.visuals ? `<details class="spectrum-panel"><summary>Spectrogram comparison</summary><div class="spectrum-prompt"><span>Text prompt</span><p>${escape(example.prompt)}</p></div>${controls}<div class="generation-figure">${spectrumFigure(example.visuals.spectrum, 'Full-clip spectrograms', 'Dataset reference, AuDiAE, AuDiAE-H and baselines; full-clip spectrograms for ' + example.prompt)}</div></details>` : '';
       return `<article class="example"><p class="prompt"><span class="example-number">${String(index + 1).padStart(2, '0')}</span><span><span class="prompt-label">Text prompt</span>${escape(example.prompt)}</span></p><div class="generation-reference">${track(example.reference, example.id)}</div><div class="track-grid">${example.models.map(model => track(model, example.id)).join('')}</div>${figure}</article>`;
     }).join('');
   }
 
-  function cells(row) {
+  function cells(row, columns) {
+    if ('group' in row) return row.group ? `<tr class="group-row"><th scope="colgroup" colspan="${columns}">${escape(row.group)}</th></tr>` : `<tr class="divider-row"><td colspan="${columns}"></td></tr>`;
     return `<tr class="${row.ours ? 'ours' : ''}">${row.cells.map((cell, index) => `<td${index === 0 ? ' class="model-name"' : ''}>${cell.bold ? `<strong>${escape(cell.text)}</strong>` : escape(cell.text)}</td>`).join('')}</tr>`;
+  }
+
+
+  function resultTable(caption, header, rows) {
+    return `<div class="table-scroll" tabindex="0" role="region" aria-label="${escape(caption)}"><table><caption>${escape(caption)}</caption><thead>${header}</thead><tbody>${rows.map(row => cells(row, rows.find(r => r.cells).cells.length)).join('')}</tbody></table></div>`;
   }
 
   function showResults(kind) {
     $('#result-tabs').querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.result === kind)));
+    if (kind === 'controlled') {
+      $('#result-table').innerHTML = `<div class="table-stack">${resultTable('Table 3(a). Rate-model control on the AudioCaps test set.', '<tr class="grouped"><th scope="col" rowspan="2">Rate objective</th><th scope="colgroup" colspan="4">Reconstruction</th><th scope="colgroup" colspan="2">Generation</th></tr><tr><th scope="col">MEL ↓</th><th scope="col">STFT ↓</th><th scope="col">SI-SDR ↑</th><th scope="col">rFAD ↓</th><th scope="col">FAD ↓</th><th scope="col">CLAP ↑</th></tr>', data.tables.controlled.a)}${resultTable('Table 3(b). Text-conditional rate on the AudioCaps test set.', '<tr><th scope="col">Rate objective</th><th scope="col">FAD ↓</th><th scope="col">CLAP ↑</th></tr>', data.tables.controlled.b)}</div><p class="note">Panel (a) compares the fixed-Gaussian rate with the learned unconditional diffusion rate under the same endpoint channel and training contract. Panel (b) compares unconditional, shuffled-caption and paired-caption diffusion-rate objectives. All distributional metrics use LAION-CLAP.</p>`;
+      return;
+    }
     const specification = {
       reconstruction: {
         caption: 'Table 1. Audio reconstruction on sound and music benchmarks.',
@@ -234,12 +257,13 @@
         note: 'Each frozen autoencoder is paired with the same generator family. Prompts, sampling and evaluation are fixed across rows. FAD uses CLAP embeddings.'
       }
     }[kind];
-    $('#result-table').innerHTML = `<div class="table-scroll" tabindex="0" role="region" aria-label="${escape(specification.caption)}"><table><caption>${escape(specification.caption)}</caption><thead>${specification.header}</thead><tbody>${data.tables[kind].map(cells).join('')}</tbody></table></div><p class="note">${escape(specification.note)}</p>`;
+    $('#result-table').innerHTML = `${resultTable(specification.caption, specification.header, data.tables[kind])}<p class="note">${escape(specification.note)}</p>`;
   }
 
   $('#domain-tabs').querySelectorAll('button').forEach(button => button.addEventListener('click', () => selectDomain(button.dataset.domain)));
   $('#dataset-select').addEventListener('change', event => selectDataset(event.target.value));
   $('#result-tabs').querySelectorAll('button').forEach(button => button.addEventListener('click', () => showResults(button.dataset.result)));
+  document.querySelectorAll('[data-result-link]').forEach(link => link.addEventListener('click', () => showResults(link.dataset.resultLink)));
   selectDomain('sound');
   $('#sound-generation').innerHTML = examplesMarkup(data.generation.sound);
   wirePlayers($('#sound-generation'));
