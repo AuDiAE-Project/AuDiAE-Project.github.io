@@ -6,7 +6,7 @@
   <meta name="description" content="AuDiAE: method overview and audio examples for reconstruction and text-to-audio generation.">
   <title>AuDiAE — Audio Examples</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=5b82dd71c33f">
-  <link rel="stylesheet" href="styles.css?v=75f752cf325d">
+  <link rel="stylesheet" href="styles.css?v=64faf9cab1d4">
   <script defer src="data.js?v=a0cf3c5f0a3c"></script>
   <script defer src="app.js?v=8a289473a866"></script>
 </head>
@@ -48,7 +48,7 @@
       <img src="assets/method/framework.png?v=9698f62b67a6" width="1815" height="646" alt="AuDiAE encoder, marginal and conditional diffusion rate model, and latent-conditioned waveform diffusion decoder.">
       <figcaption>The encoder output <i>U</i> feeds two paths.<br><span class="badge">A</span>The diffusion rate model with the learned null ∅ gives the marginal rate.<br><span class="badge">B</span>The same model given the caption feature <i>C</i> gives the conditional rate; both are mixed in the rate regularizer.<br><span class="badge">C</span>The waveform diffusion decoder is conditioned on the noisy endpoint <i>Z</i><sub>b</sub>; text does not enter it.</figcaption>
     </figure>
-    <h3 class="method-subhead">Three limitations of the standard design</h3>
+    <h3 class="method-subhead"><span class="method-kicker">Motivation</span>Three limitations of the standard design</h3>
     <ol class="problem-cards">
       <li class="problem-card">
         <span class="problem-number">①</span>
@@ -84,7 +84,7 @@
         </figure>
       </div>
     </div>
-    <h3 class="method-subhead">How AuDiAE addresses them</h3>
+    <h3 class="method-subhead"><span class="method-kicker">Approach</span>How AuDiAE addresses them</h3>
     <ol class="method-rows">
       <li class="method-row" id="component-a">
         <div class="method-copy">
