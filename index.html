@@ -6,7 +6,7 @@
   <meta name="description" content="AuDiAE: method overview and audio examples for reconstruction and text-to-audio generation.">
   <title>AuDiAE — Audio Examples</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=5b82dd71c33f">
-  <link rel="stylesheet" href="styles.css?v=63d12d07ec5a">
+  <link rel="stylesheet" href="styles.css?v=75f752cf325d">
   <script defer src="data.js?v=a0cf3c5f0a3c"></script>
   <script defer src="app.js?v=8a289473a866"></script>
 </head>
@@ -43,12 +43,17 @@
 
   <section id="method" aria-labelledby="method-title">
     <h2 id="method-title"><span class="section-number">01</span> Method</h2>
-    <p class="method-lead">An audio latent serves two consumers: the decoder that reconstructs the waveform, and the downstream generator that learns to produce latents from text. AuDiAE starts from three limitations of the usual design, a Gaussian KL penalty with a deterministic decoder.</p>
+    <p class="method-lead">An audio latent serves two consumers: the decoder that reconstructs the waveform, and the downstream generator that learns to produce latents from text. The standard design serves both with a Gaussian KL penalty and a deterministic decoder; AuDiAE replaces them with a learned diffusion rate model and a waveform diffusion decoder around a shared encoder output.</p>
+    <figure class="method-figure framework-figure">
+      <img src="assets/method/framework.png?v=9698f62b67a6" width="1815" height="646" alt="AuDiAE encoder, marginal and conditional diffusion rate model, and latent-conditioned waveform diffusion decoder.">
+      <figcaption>The encoder output <i>U</i> feeds two paths.<br><span class="badge">A</span>The diffusion rate model with the learned null ∅ gives the marginal rate.<br><span class="badge">B</span>The same model given the caption feature <i>C</i> gives the conditional rate; both are mixed in the rate regularizer.<br><span class="badge">C</span>The waveform diffusion decoder is conditioned on the noisy endpoint <i>Z</i><sub>b</sub>; text does not enter it.</figcaption>
+    </figure>
+    <h3 class="method-subhead">Three limitations of the standard design</h3>
     <ol class="problem-cards">
       <li class="problem-card">
         <span class="problem-number">①</span>
         <h3>Standard KL also charges for mismatch</h3>
-        <p>The KL to 𝒩(0, I) adds two costs: the information the latent carries about the audio, and the mismatch between the latent distribution and 𝒩(0, I). Only the first serves reconstruction, yet under a tight budget the second consumes rate that could carry detail.</p>
+        <p>The KL to 𝒩(0, I) adds two costs: the information the latent carries about the audio, and the mismatch between the latent distribution and 𝒩(0, I). Only the first serves reconstruction, yet under a tight budget the second consumes rate that could carry detail (illustrated and measured below).</p>
         <div class="problem-math"><img src="assets/method/eq_problem_rate.svg?v=ca50ae4ee515" style="width:19.6em" alt="R_0 = I(X;Z) [information] + KL(q_phi || N(0, I)) [mismatch to N(0, I)]"></div>
         <a class="problem-link" href="#component-a">Addressed by A · learned diffusion rate</a>
       </li>
@@ -68,7 +73,6 @@
       </li>
     </ol>
     <div class="price-block">
-      <h3>Problem ①: what the standard KL costs</h3>
       <div class="price-grid">
         <figure class="method-figure">
           <img src="assets/method/teaser_motivation.png?v=1fc6f90f1f4e" width="1600" height="464" alt="Schematic densities: a fixed Gaussian reference versus a learned diffusion reference that follows a multimodal aggregate latent density.">
@@ -80,10 +84,7 @@
         </figure>
       </div>
     </div>
-    <figure class="method-figure framework-figure">
-      <img src="assets/method/framework.png?v=9698f62b67a6" width="1815" height="646" alt="AuDiAE encoder, marginal and conditional diffusion rate model, and latent-conditioned waveform diffusion decoder.">
-      <figcaption>The encoder output <i>U</i> feeds two paths.<br><span class="badge">A</span>The diffusion rate model with the learned null ∅ gives the marginal rate.<br><span class="badge">B</span>The same model given the caption feature <i>C</i> gives the conditional rate; both are mixed in the rate regularizer.<br><span class="badge">C</span>The waveform diffusion decoder is conditioned on the noisy endpoint <i>Z</i><sub>b</sub>; text does not enter it.</figcaption>
-    </figure>
+    <h3 class="method-subhead">How AuDiAE addresses them</h3>
     <ol class="method-rows">
       <li class="method-row" id="component-a">
         <div class="method-copy">
